@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+MODEL="${BM_MODEL:-qwen2.5-coder:7b}"
+CMD="${1:-help}"
+shift || true
+
+require_ollama() {
+  if ! command -v ollama >/dev/null 2>&1; then
+    echo "Missing ollama. Install it first: brew install ollama"
+    exit 1
+  fi
+}
+
+load_memory() {
+  if [ -d "$BASE/memory" ]; then
+    cat "$BASE"/memory/*.md 2>/dev/null || true
+  fi
+}
+
+case "$CMD" in
+  ask)
+    require_ollama
+    PROMPT="$*"
+    ollama run "$MODEL" "You are BlackMamba Studio, a local-first creative engineering assistant.
+
+Memory:
+$(load_memory)
+
+Task:
+$PROMPT"
+    ;;
+
+  song)
+    require_ollama
+    THEME="$*"
+    ollama run llama3.2:3b "Create a complete song for BlackMamba RECORDS / Iyari Gomez.
+Theme: $THEME
+Structure: intro, verse 1, pre-chorus, chorus, verse 2, bridge, final chorus, outro.
+Make it catchy, singable, and ready for AI music generation."
+    ;;
+
+  prompt)
+    require_ollama
+    IDEA="$*"
+    ollama run llama3.2:3b "Create a cinematic cover-art prompt for BlackMamba RECORDS / Iyari Gomez.
+Idea: $IDEA
+Include: format, style, text placement, and negative prompt."
+    ;;
+
+  repo)
+    require_ollama
+    TARGET="${1:-.}"
+    TMP="/tmp/blackmamba_repo_scan.txt"
+    find "$TARGET" -maxdepth 2 -type f \( -name "*.md" -o -name "*.py" -o -name "*.js" -o -name "*.ts" -o -name "*.tsx" -o -name "package.json" \) \
+      | head -80 \
+      | while read -r file; do
+          echo "===== $file ====="
+          sed -n '1,160p' "$file"
+        done > "$TMP"
+
+    ollama run qwen2.5-coder:7b "Analyze this repository like an engineering operator.
+Return:
+1. What it does
+2. What is missing
+3. Risks
+4. Next 5 commits
+5. Commands to run
+
+Repository content:
+$(cat "$TMP")"
+    ;;
+
+  help|*)
+    cat <<'HELP'
+BlackMamba Studio CLI
+
+Usage:
+  ./scripts/bm ask "question"
+  ./scripts/bm song "theme"
+  ./scripts/bm prompt "cover idea"
+  ./scripts/bm repo ./path
+
+Environment:
+  BM_MODEL=qwen2.5-coder:7b ./scripts/bm ask "..."
+HELP
+    ;;
+esac
